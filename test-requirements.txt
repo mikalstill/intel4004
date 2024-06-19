@@ -1,0 +1,5 @@
+testtools           # mit
+stestr              # apache2
+flake8              # mit
+tox>3.17            # mit
+coverage            # apache2
