@@ -37,8 +37,7 @@ class EmulatorTests(testtools.TestCase):
 
 class OpcodeTests(testtools.TestCase):
     ###########################################################################
-    # NOP (noop) is documented on page 3-48 of the MCS-4 assembly language
-    # manual.
+    # NOP (noop) is documented on page 3-48 of the assembly language manual.
     def test_noop(self):
         em = emulator.Intel4004()
         em.set_rom(0, [0x00, 0x00, 0x00])
@@ -189,8 +188,19 @@ class OpcodeTests(testtools.TestCase):
         self.assertEqual(0x0106, em.program_counter.get())
 
     ###########################################################################
-    # JUN (jump unconditionally) is documented on page 3-48 of the MCS-4
-    # assembly language manual. This jump can be to another memory page.
+    # FIM (fetch immediate) is documented on page 3-36 of the assembly language
+    # manual. This instruction loads a _byte_ into one of the 8-bit pseudo
+    # registers.
+    def test_fim(self):
+        em = emulator.Intel4004()
+        em.set_rom(0x00, [0x24, 0x12])
+        em.step()
+        self.assertEqual(0x02, em.program_counter.get())
+        self.assertEqual(0x12, em.eight_bit_registers['2P'].get())
+
+    ###########################################################################
+    # JUN (jump unconditionally) is documented on page 3-48 of the assembly
+    # language manual. This jump can be to another memory page.
     def test_jun(self):
         em = emulator.Intel4004()
         em.program_counter.set(0x00FE)

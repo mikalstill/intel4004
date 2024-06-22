@@ -50,12 +50,18 @@ class Intel4004():
             0xF8: self.opcode_dac,
         }
 
-        # Per-register instructions
+        # Per 4-bit register instructions
         for i in range(16):
             self._dispatch_map[0x80 + i] = partial(self.opcode_add, f'{i}')
             self._dispatch_map[0x90 + i] = partial(self.opcode_sub, f'{i}')
             self._dispatch_map[0xA0 + i] = partial(self.opcode_ld, f'{i}')
             self._dispatch_map[0xB0 + i] = partial(self.opcode_xch, f'{i}')
+
+        # Per 8-bit register instructions
+        for i in range(8):
+            register = i << 1
+            self._dispatch_map[0x20 | register] = \
+                partial(self.opcode_fim, f'{i}P')
 
         # Immediate value instructions
         for i in range(16):
@@ -133,6 +139,13 @@ class Intel4004():
             # simply doing a bit swap.
 
             self.program_counter.set(pc)
+
+    def opcode_fim(self, eight_bit_register):
+        # 0x2_ / FIM / Load 8-bit register immediate, where the value to load
+        # is the next byte in ROM.
+        value = self.rom[self.program_counter.get()]
+        self.eight_bit_registers[eight_bit_register].set(value)
+        self.program_counter.increment()
 
     def opcode_jun(self, top_four_bits_of_address):
         # 0x4_ / JUN / Jump to 12 bit address with four bits from the opcode
