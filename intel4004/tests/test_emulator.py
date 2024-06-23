@@ -243,6 +243,17 @@ class OpcodeTests(testtools.TestCase):
         self.assertEqual(0x0123, em.program_counter.get())
 
     ###########################################################################
+    # JMS (jump to subroutine) is documented on page 3-45 of the assembly
+    # language manual. This jump can be to another memory page and pushes the
+    # return location onto the stack.
+    def test_jms(self):
+        em = emulator.Intel4004()
+        em.set_rom(0x00, [0x51, 0x23])
+        em.step()
+        self.assertEqual(0x0123, em.program_counter.get())
+        self.assertEqual(0x0002, em.stack.registers[0].get())
+
+    ###########################################################################
     # ADD (add register value to accumulator with carry) is documented on page
     # 3-21 of the assembly language manual.
     def test_add_no_incoming_carry(self):
@@ -341,6 +352,22 @@ class OpcodeTests(testtools.TestCase):
         self.assertEqual(0b1010, em.accumulator.get())
         self.assertEqual(0b0101, em.four_bit_registers['1'].get())
         self.assertEqual(0, em.carry.get())
+
+    ###########################################################################
+    # BBL (branch back) is documented on page 3-46 of the assembly language
+    # manual.
+    def test_bbl(self):
+        em = emulator.Intel4004()
+        em.set_rom(0x0000, [0x51, 0x23])
+        em.set_rom(0x0123, [0xC4])
+
+        em.step()
+        self.assertEqual(0x0123, em.program_counter.get())
+        self.assertEqual(0x0002, em.stack.registers[0].get())
+
+        em.step()
+        self.assertEqual(0x0002, em.program_counter.get())
+        self.assertEqual(0x04, em.accumulator.get())
 
     ###########################################################################
     # LDM (load accumulator immediate) is documented on page 3-37 of the

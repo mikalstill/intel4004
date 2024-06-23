@@ -170,3 +170,25 @@ class TwelveBitRegisterTests(testtools.TestCase, BaseTestsMixin):
         self.assertEqual(
             0b010101010101, inverted,
             f'101010101010 not inverted correctly, got {inverted:04b}')
+
+
+class CircularBufferTests(testtools.TestCase):
+    def test_circular_buffer(self):
+        cb = registers.CircularBuffer(
+            registers.TwelveBitRegister('stack-0'),
+            registers.TwelveBitRegister('stack-1'),
+            registers.TwelveBitRegister('stack-2')
+        )
+
+        cb.push(1)
+        self.assertEqual(1, cb.registers[0].get())
+        cb.push(2)
+        self.assertEqual(2, cb.registers[1].get())
+        cb.push(3)
+        self.assertEqual(3, cb.registers[2].get())
+        cb.push(4)
+        self.assertEqual(4, cb.registers[0].get())
+
+        self.assertEqual(4, cb.pop())
+        self.assertEqual(3, cb.pop())
+        self.assertEqual(2, cb.pop())

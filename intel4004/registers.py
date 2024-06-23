@@ -1,5 +1,3 @@
-# MCS-4 assembly reference manual, page 11
-
 MAX_ONE_BIT_VALUE = (2**1) - 1
 MAX_FOUR_BIT_VALUE = (2**4) - 1
 MAX_EIGHT_BIT_VALUE = (2**8) - 1
@@ -54,7 +52,7 @@ class Register():
         return out
 
 
-# Intel4004 has one one bit register.
+# Intel4004 has one 1-bit register.
 class OneBitRegister(Register):
     num_bits = 1
 
@@ -66,7 +64,7 @@ class OneBitRegister(Register):
         return f'One bit register {self.name} with value {self.get()}'
 
 
-# Intel4004 has 16 four bit registers.
+# Intel4004 has 16 4-bit registers.
 class FourBitRegister(Register):
     num_bits = 4
 
@@ -78,7 +76,7 @@ class FourBitRegister(Register):
         return f'Four bit register {self.name} with value {self.get()}'
 
 
-# Intel4004 can use the four bit registers as eight eight bit registers.
+# Intel4004 can use the 4-bit registers as eight eight bit registers.
 class EightBitPhantomRegister(Register):
     num_bits = 8
 
@@ -108,7 +106,7 @@ class EightBitPhantomRegister(Register):
         return value
 
 
-# Intel4004 also has one real eight bit register
+# Intel4004 also has one real 8-bit register
 class EightBitRegister(Register):
     num_bits = 8
 
@@ -120,7 +118,7 @@ class EightBitRegister(Register):
         return f'Eight bit register {self.name} with value {self.get()}'
 
 
-# The Intel4004 program counter is a 12 bit register. Yes really. It does not
+# The Intel4004 program counter is a 12-bit register. Yes really. It does not
 # pretend to be backed by three four bit registers though.
 class TwelveBitRegister(Register):
     num_bits = 12
@@ -131,3 +129,20 @@ class TwelveBitRegister(Register):
 
     def __repr__(self):
         return f'Twelve bit register {self.name} with value {self.get()}'
+
+
+# The stack is a circular buffer of 12-bit registers.
+class CircularBuffer():
+    def __init__(self, *args):
+        self.registers = args
+        self.index = 0
+
+    def push(self, value):
+        self.registers[self.index].set(value)
+        self.index = (self.index + 1) % len(self.registers)
+
+    def pop(self):
+        self.index -= 1
+        if self.index < 0:
+            self.index = len(self.registers) - 1
+        return self.registers[self.index].get()

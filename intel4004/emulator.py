@@ -7,15 +7,38 @@ class UnknownOpcode(Exception):
     ...
 
 
+class OpcodeCollision(Exception):
+    ...
+
+
+class OpcodeRegistry():
+    def __init__(self):
+        self.opcodes = {}
+
+    def register(self, opcode, function):
+        if opcode in self.opcodes:
+            raise OpcodeCollision(
+                f'opcode {opcode:02x} is already registered to '
+                f'{self.opcodes[opcode]}')
+        self.opcodes[opcode] = function
+
+    def lookup(self, opcode):
+        if opcode not in self.opcodes:
+            raise UnknownOpcode(f'opcode {opcode:02x} is not registered')
+        return self.opcodes[opcode]
+
+
 class Intel4004():
     def __init__(self):
-        # We have 16 four bit registers
+        # We have 16 four bit registers, as described on page 2-2 of the assembly
+        # language manual.
         self.four_bit_registers = {}
         for i in range(16):
             name = f'{i}'
             self.four_bit_registers[name] = registers.FourBitRegister(name)
 
-        # Those four bit registers can be paired into eight bit registers
+        # Those four bit registers can be paired into eight bit registers. Also
+        # page 2-2.
         self.eight_bit_registers = {}
         for i in range(8):
             name = f'{i}P'
@@ -24,16 +47,18 @@ class Intel4004():
                 self.four_bit_registers[f'{i * 2}'],
                 self.four_bit_registers[f'{i * 2 + 1}'])
 
-        # Control registers
+        # Control registers, per page 2-3 of the assembly language manual.
         self.program_counter = registers.TwelveBitRegister('pc')
         self.accumulator = registers.FourBitRegister('acc')
         self.carry = registers.OneBitRegister('carry')
         self.data_pointer = registers.EightBitRegister('dp')
-        self.return_stack = [
+
+        # Stack. This is described on page 2-7 of the assembly language manual.
+        # These three registers form a circular buffer.
+        self.stack = registers.CircularBuffer(
             registers.TwelveBitRegister('stack-0'),
             registers.TwelveBitRegister('stack-1'),
-            registers.TwelveBitRegister('stack-2')
-        ]
+            registers.TwelveBitRegister('stack-2'))
 
         # Actually a pin, but we model it as a one bit register
         self.test_pin = registers.OneBitRegister('test')
@@ -42,40 +67,46 @@ class Intel4004():
         self.rom = [0] * 4096
 
         # Dispatcher for opcodes
-        self._dispatch_map = {
-            0x00: self.opcode_noop,
-            0xF0: self.opcode_clb,
-            0xF1: self.opcode_clc,
-            0xF2: self.opcode_iac,
-            0xF8: self.opcode_dac,
-        }
+        self._dispatch_map = OpcodeRegistry()
+        self._dispatch_map.register(0x00, self.opcode_noop)
+        self._dispatch_map.register(0xF0, self.opcode_clb)
+        self._dispatch_map.register(0xF1, self.opcode_clc)
+        self._dispatch_map.register(0xF2, self.opcode_iac)
+        self._dispatch_map.register(0xF8, self.opcode_dac)
 
         # Per 4-bit register instructions
         for i in range(16):
-            self._dispatch_map[0x60 + i] = partial(self.opcode_inc, f'{i}')
-            self._dispatch_map[0x80 + i] = partial(self.opcode_add, f'{i}')
-            self._dispatch_map[0x90 + i] = partial(self.opcode_sub, f'{i}')
-            self._dispatch_map[0xA0 + i] = partial(self.opcode_ld, f'{i}')
-            self._dispatch_map[0xB0 + i] = partial(self.opcode_xch, f'{i}')
+            self._dispatch_map.register(
+                0x60 + i, partial(self.opcode_inc, f'{i}'))
+            self._dispatch_map.register(
+                0x80 + i, partial(self.opcode_add, f'{i}'))
+            self._dispatch_map.register(
+                0x90 + i, partial(self.opcode_sub, f'{i}'))
+            self._dispatch_map.register(
+                0xA0 + i, partial(self.opcode_ld, f'{i}'))
+            self._dispatch_map.register(
+                0xB0 + i, partial(self.opcode_xch, f'{i}'))
 
         # Per 8-bit register instructions
         for i in range(8):
             register = i << 1
-            self._dispatch_map[0x20 | register] = \
-                partial(self.opcode_fim, f'{i}P')
+            self._dispatch_map.register(
+                0x20 | register, partial(self.opcode_fim, f'{i}P'))
 
-            self._dispatch_map[0x30 | register | 0x01] = \
-                partial(self.opcode_jin, f'{i}P')
+            self._dispatch_map.register(
+                0x30 | register | 0x01, partial(self.opcode_jin, f'{i}P'))
 
         # Immediate value instructions
         for i in range(16):
-            self._dispatch_map[0xD0 + i] = partial(self.opcode_ldm, i)
+            self._dispatch_map.register(0xC0 + i, partial(self.opcode_bbl, i))
+            self._dispatch_map.register(0xD0 + i, partial(self.opcode_ldm, i))
 
         # Immediate value 12 bit argument instructions. The next byte is read
         # by the opcode implementation below.
         for i in range(2**4 - 1):
-            self._dispatch_map[0x10 + i] = partial(self.opcode_jcn, i)
-            self._dispatch_map[0x40 + i] = partial(self.opcode_jun, i)
+            self._dispatch_map.register(0x10 + i, partial(self.opcode_jcn, i))
+            self._dispatch_map.register(0x40 + i, partial(self.opcode_jun, i))
+            self._dispatch_map.register(0x50 + i, partial(self.opcode_jms, i))
 
     def set_rom(self, address, rom):
         for i in range(len(rom)):
@@ -83,11 +114,8 @@ class Intel4004():
 
     def step(self):
         opcode = self.rom[self.program_counter.get()]
-        if opcode not in self._dispatch_map:
-            raise UnknownOpcode(f'opcode 0x{opcode:02X} is unknown')
-
         self.program_counter.increment()
-        self._dispatch_map[opcode]()
+        self._dispatch_map.lookup(opcode)()
 
     def dump(self, opcode):
         print(f'--> Executed opcode {opcode:02X}')
@@ -159,6 +187,16 @@ class Intel4004():
         address = address | self.eight_bit_registers[eight_bit_register].get()
         self.program_counter.set(address)
 
+    def opcode_jms(self, top_four_bits_of_address):
+        # 0x45_ / JMS / Jump to 12 bit address with four bits from the opcode
+        # and the other four bits from the object code stream. Put ROM address
+        # after this instruction onto the stack before jumping.
+        new_address = top_four_bits_of_address << 8
+        new_address += self.rom[self.program_counter.get()]
+        return_address = self.program_counter.get() + 1
+        self.stack.push(return_address)
+        self.program_counter.set(new_address)
+
     def opcode_inc(self, four_bit_register):
         # 0x6_ / INC / Increment register, without changing carry.
         try:
@@ -212,6 +250,12 @@ class Intel4004():
         r = self.four_bit_registers[four_bit_register].get()
         self.four_bit_registers[four_bit_register].set(self.accumulator.get())
         self.accumulator.set(r)
+
+    def opcode_bbl(self, value):
+        # 0x6_ / BBL / Branch back (return from subroutine) and load immediate
+        # value into accumulator.
+        self.program_counter.set(self.stack.pop())
+        self.accumulator.set(value)
 
     def opcode_ldm(self, value):
         # 0xD_ / LDM / Load immediate
