@@ -199,6 +199,40 @@ class OpcodeTests(testtools.TestCase):
         self.assertEqual(0x12, em.eight_bit_registers['2P'].get())
 
     ###########################################################################
+    # JIN (jump indirect) is documented on page 3-40 of the assembly language
+    # manual.
+    def test_jin(self):
+        em = emulator.Intel4004()
+        em.eight_bit_registers['2P'].set(0x78)
+        em.set_rom(0x0100, [0x35, 0x12])
+        em.program_counter.set(0x0100)
+        em.step()
+        self.assertEqual(0x0178, em.program_counter.get())
+
+    ###########################################################################
+    # INC (increment register) is documented on page 3-17 of the assembly language
+    # manual.
+    def test_jin(self):
+        em = emulator.Intel4004()
+        em.four_bit_registers['3'].set(6)
+        em.four_bit_registers['8'].set(15)
+        em.four_bit_registers['9'].set(15)
+        em.set_rom(0x00, [0x63, 0x68, 0x69])
+
+        em.step()
+        self.assertEqual(7, em.four_bit_registers['3'].get())
+        self.assertEqual(0, em.carry.get())
+
+        em.step()
+        self.assertEqual(0, em.four_bit_registers['8'].get())
+        self.assertEqual(0, em.carry.get())
+
+        em.carry.set(1)
+        em.step()
+        self.assertEqual(0, em.four_bit_registers['9'].get())
+        self.assertEqual(1, em.carry.get())
+
+    ###########################################################################
     # JUN (jump unconditionally) is documented on page 3-48 of the assembly
     # language manual. This jump can be to another memory page.
     def test_jun(self):

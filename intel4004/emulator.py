@@ -52,6 +52,7 @@ class Intel4004():
 
         # Per 4-bit register instructions
         for i in range(16):
+            self._dispatch_map[0x60 + i] = partial(self.opcode_inc, f'{i}')
             self._dispatch_map[0x80 + i] = partial(self.opcode_add, f'{i}')
             self._dispatch_map[0x90 + i] = partial(self.opcode_sub, f'{i}')
             self._dispatch_map[0xA0 + i] = partial(self.opcode_ld, f'{i}')
@@ -62,6 +63,9 @@ class Intel4004():
             register = i << 1
             self._dispatch_map[0x20 | register] = \
                 partial(self.opcode_fim, f'{i}P')
+
+            self._dispatch_map[0x30 | register | 0x01] = \
+                partial(self.opcode_jin, f'{i}P')
 
         # Immediate value instructions
         for i in range(16):
@@ -147,6 +151,21 @@ class Intel4004():
         self.eight_bit_registers[eight_bit_register].set(value)
         self.program_counter.increment()
 
+    def opcode_jin(self, eight_bit_register):
+        # 0x3_ / JIN / Jump indirect, where the relative address to jump to is
+        # in the specified 8-bit register. The top four bits of the original
+        # program counter are retained.
+        address = self.program_counter.get() & 0x0F00
+        address = address | self.eight_bit_registers[eight_bit_register].get()
+        self.program_counter.set(address)
+
+    def opcode_inc(self, four_bit_register):
+        # 0x6_ / INC / Increment register, without changing carry.
+        try:
+            self.four_bit_registers[four_bit_register].increment()
+        except registers.ValueOutOfBounds:
+            self.four_bit_registers[four_bit_register].set(0)
+
     def opcode_jun(self, top_four_bits_of_address):
         # 0x4_ / JUN / Jump to 12 bit address with four bits from the opcode
         # and the other four bits from the object code stream
@@ -154,11 +173,11 @@ class Intel4004():
         address += self.rom[self.program_counter.get()]
         self.program_counter.set(address)
 
-    def opcode_add(self, register_name):
+    def opcode_add(self, four_bit_register):
         # 0x8_ / ADD / Add register value to accumulator
         value = self.accumulator.get()
         value += self.carry.get()
-        value += self.four_bit_registers[register_name].get()
+        value += self.four_bit_registers[four_bit_register].get()
 
         if value > registers.MAX_FOUR_BIT_VALUE:
             self.carry.set(1)
@@ -166,11 +185,11 @@ class Intel4004():
 
         self.accumulator.set(value)
 
-    def opcode_sub(self, register_name):
+    def opcode_sub(self, four_bit_register):
         # 0x9_ / SUB / Subtract register value from accumulator
         value = self.accumulator.get()
 
-        register = self.four_bit_registers[register_name].get_inverted()
+        register = self.four_bit_registers[four_bit_register].get_inverted()
         value += register
 
         carry = self.carry.get_inverted()
@@ -184,14 +203,14 @@ class Intel4004():
             value -= 0b00010000
         self.accumulator.set(value)
 
-    def opcode_ld(self, register_name):
+    def opcode_ld(self, four_bit_register):
         # 0xA_ / LD / Load register value into accumulator
-        self.accumulator.set(self.four_bit_registers[register_name].get())
+        self.accumulator.set(self.four_bit_registers[four_bit_register].get())
 
-    def opcode_xch(self, register_name):
+    def opcode_xch(self, four_bit_register):
         # 0xB_ / XCH / Exchange accumulator with register
-        r = self.four_bit_registers[register_name].get()
-        self.four_bit_registers[register_name].set(self.accumulator.get())
+        r = self.four_bit_registers[four_bit_register].get()
+        self.four_bit_registers[four_bit_register].set(self.accumulator.get())
         self.accumulator.set(r)
 
     def opcode_ldm(self, value):
